@@ -3,11 +3,8 @@
 from cmd import Cmd
 import os
 from tabulate import tabulate
-import traceback
-
 import requests
-import json
-from urllib import urlencode
+import sys
 
 #------------------ Base API Class -----------------------------------------------
 class APIClient(object):
@@ -71,8 +68,8 @@ class APIClient(object):
         return self._request('delete', path, data=data, **params)
 
 # -------------------------------------------------------------------------------
-class UserAPI(APIClient):
-    BASE_URL = 'http://localhost/api/v1.0'
+class BASEAPI(APIClient):
+    BASE_URL = 'http://localhost'
     METHOD_ALLOWED = ['get','post','put','delete']
 
 class GroupAPI(APIClient):
@@ -98,6 +95,8 @@ class JailsAPI(APIClient):
 # -------------------------------------------------------------------------------
 class FreenasAPI(object):
 
+    resource_dict = {}
+
     def display_tabulate(self, result):
         headers = result[0].keys()
         table = []
@@ -105,9 +104,25 @@ class FreenasAPI(object):
             table.append(loop.values())
         print tabulate(table,headers, tablefmt="pipe")
 
+    def get_tastypie_resource(self, *args, **kwargs):
+        self.resource_url = BASEAPI()
+        self.format_url = '/api/v1.0/?format=json'
+        self.username = kwargs.get('username', 'root')
+        self.password = kwargs.get('password', 'abcd1234')
+        try:
+            self.resource_out = self.resource_url.get(self.format_url, username=self.username, password=self.password)
+            for loop in self.resource_out.keys():
+                self.resource_dict[loop] = self.resource_out[loop]['list_endpoint']
+            print "Welcome to Enbale/Debug Mode"
+        except Exception:
+            return "Could not connect to Freenas API"
+
+
     def users(self,*args,**kwargs):
-        self.user_apiurl = UserAPI()
-        self.user_path = '/account/users/'
+        self.user_apiurl = BASEAPI()
+        self.user_path = self.resource_dict.get('account/users', None)
+        if self.user_path == None:
+            return "API Url not avaliable"
         user_id = kwargs.get('id','all')
         if user_id != 'all':
             self.user_path = '/account/users/'+str(user_id)+'/'
@@ -133,6 +148,27 @@ class FreenasAPI(object):
         except Exception :
             return "Error in Getting Group Data"
 
+    def resources(self, *args, **kwargs):
+        if args[0] == '':
+            headers = ['name', 'url']
+            print tabulate(self.resource_dict.items(),headers, tablefmt="pipe")
+        else:
+            self.rs_apiurl = BASEAPI()
+            self.rs_path = self.resource_dict.get(args[0][0], None)
+            if self.rs_path == None:
+                return "API Url not avaliable"
+            rs_id = args[0][1]
+            if rs_id != 'all':
+                self.rc_path = self.resource_dict[args[0][0]]+str(rs_id)+'/'
+            self.username = kwargs.get('username', 'root')
+            self.password = kwargs.get('password', 'abcd1234')
+            try:
+                self.rc_response = self.rs_apiurl.get(self.rs_path, username=self.username, password=self.password)
+                self.display_tabulate(self.rc_response)
+            except Exception :
+                return "Error in Getting User Data"
+
+
 # -------------------------------------------------------------------------------
 # Cli Section.
 # All cli need to be supported need to added here.
@@ -152,23 +188,37 @@ class FreenasPrompt(Cmd, FreenasAPI):
             name = args
         print "Welcome to Freenas, %s" % name
 
-    def do_en(self, args):
-        """Move to Enbale Mode"""
+    def do_en(self, in_args):
+        """Move to Enbale Mode """
         if self.mode == 'default':
-            self.prompt = 'Freenas-enable> '
+            self.prompt = self.prompt[:-2]+'-enable> '
             self.mode = 'enable'
-            print "Welcome to Freenas Enbale/Debug Mode"
+            call_function = getattr(self,'get_tastypie_resource')
+            call_function(in_args,username=self.username, password=self.password)
         else:
             print "Already in Enable mode"
 
+    def do_resources(self, in_args):
+        """ to get all resources url"""
+        if self.mode == 'enable':
+            call_function = getattr(self,'resources')
+            call_function(in_args,username=self.username, password=self.password)
+        else :
+            print "Only works in Enable mode"
+
     def do_get(self,in_args):
         """ Works on Enbale mode only
- Get the details Users/Groups .. etc
+ Get the details resources <resources_name all
+ Eg : get resources jails/jails all
+ Eg : get resources account/users all
         """
         # Check the invalid Charater as input data
         if in_args in ['?'] or len(in_args) == 0:
             print "Wrong option try '? get'"
-            print "get <users/groups>"
+            print "Error_1 : Input arguments are wrong"
+            print "Try get resources <resources_name> all "
+            print " Eg : get resources jails/jails all"
+            print " Eg : get resources account/users all"
             return 0
 
         if self.mode == 'enable':
@@ -178,16 +228,27 @@ class FreenasPrompt(Cmd, FreenasAPI):
                     call_function = getattr(self,input_data[0])
                 else:
                     print "Error_1 : Input arguments are wrong"
-                    print "Try get <users/groups> "
+                    print "Try get resources <resources_name> all "
+                    print " Eg : get resources jails/jails all"
+                    print " Eg : get resources account/users all"
                     return 0
             except:
                 print "Input error"
-                # traceback.print_exc()
             call_function(input_data[1:],username=self.username, password=self.password)
         else :
             print "Only works in Enable mode"
 
     def do_quit(self, args):
+        """Quits the program."""
+        if self.mode == 'enable':
+            self.prompt = 'Freenas>'
+            self.mode = 'default'
+            print 'Quitting Enable mode'
+        else:
+            print "Quitting."
+            raise SystemExit
+
+    def do_exit(self, args):
         """Quits the program."""
         if self.mode == 'enable':
             self.prompt = 'Freenas>'
@@ -216,7 +277,10 @@ class FreenasPrompt(Cmd, FreenasAPI):
 
 if __name__ == '__main__':
     prompt = FreenasPrompt()
-    prompt.prompt = 'Freenas> '
-    prompt.info = 'Welcome to the Freenas shell. Type help or ? to list commands.\n'
+    if len(sys.argv) > 1:
+        prompt.prompt = ' '.join(sys.argv[1:])+"> "
+    else :
+        prompt.prompt = 'Freenas> '
+    prompt.info = 'Welcome to the Freenas shell. \n\
+Type help or ? to list commands.'
     prompt.cmdloop(prompt.info)
-
