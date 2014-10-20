@@ -13,7 +13,7 @@ class APIClient(object):
     :param password: the API root user password.
     """
     BASE_URL = 'http://localhost/'
-    METHOD_ALLOWED = ['get','put','post']
+    METHOD_ALLOWED = ['get','put','post','delete']
 
     def __init__(self, user=None, passwd=None):
         # userid and api key sent with every request
@@ -39,10 +39,13 @@ class APIClient(object):
             response_out = req_method(api_url,auth=auth,)
 
             # raise an exception if status code is not 200
-            if response_out.status_code is not 200:
+            if not response_out.status_code in [200,202,204]:
                 raise Exception
             else:
-                result = response_out.json()
+                try:
+                    result = response_out.json()
+                except:
+                    result = response_out
 
         except requests.ConnectionError:
             self.error = 'API connection error.'
@@ -103,6 +106,9 @@ class FreenasAPI(object):
         for loop in result:
             table.append(loop.values())
         print tabulate(table,headers, tablefmt="pipe")
+
+    def display_plain(self, result):
+        print result.text
 
     def get_tastypie_resource(self, *args, **kwargs):
         self.resource_url = BASEAPI()
@@ -168,6 +174,40 @@ class FreenasAPI(object):
             except Exception :
                 return "Error in Getting User Data"
 
+    def resources_action(self, *args, **kwargs):
+        if args[0] == '':
+            headers = ['name', 'url']
+            print tabulate(self.resource_dict.items(),headers, tablefmt="pipe")
+        else:
+            self.rs_apiurl = BASEAPI()
+            self.rs_new_path = self.resource_dict.get(kwargs['resource_name'], None)
+            if self.rs_new_path == None:
+                return "API Url not avaliable"
+            rs_id = args[0][0]
+            rc_act = args[0][1]
+            self.username = kwargs.get('username', 'root')
+            self.password = kwargs.get('password', 'abcd1234')
+            try:
+                if rc_act == 'start':
+                    self.rs_path = self.rs_new_path+str(rs_id)+'/start/'
+                    self.rc_response = self.rs_apiurl.post(self.rs_path, '', username=self.username, password=self.password)
+                    self.display_plain(self.rc_response)
+                elif rc_act == 'stop':
+                    self.rs_path = self.rs_new_path+str(rs_id)+'/stop/'
+                    self.rc_response = self.rs_apiurl.post(self.rs_path, '', username=self.username, password=self.password)
+                    self.display_plain(self.rc_response)
+                elif rc_act == 'delete':
+                    self.rs_path = self.rs_new_path+str(rs_id)+'/'
+                    self.rc_response = self.rs_apiurl.delete(self.rs_path, '', username=self.username, password=self.password)
+                    self.display_plain(self.rc_response)
+                else:
+                    self.rs_path = self.rs_new_path
+                    self.rc_response = self.rs_apiurl.get(self.rs_path, username=self.username, password=self.password)
+                    if self.rc_response.status == 204 and self.rc_response.text == '':
+                        print "Requested Plugin Delete"
+            except Exception :
+                return "Error in Getting User Data"
+
 
 # -------------------------------------------------------------------------------
 # Cli Section.
@@ -203,6 +243,41 @@ class FreenasPrompt(Cmd, FreenasAPI):
         if self.mode == 'enable':
             call_function = getattr(self,'resources')
             call_function(in_args,username=self.username, password=self.password)
+        else :
+            print "Only works in Enable mode"
+
+    def do_resource(self, in_args):
+        """ Action on resource ( start /stop / delete)
+Example: resource plugins 1 start
+         resource jails 1 start"""
+        if self.mode == 'enable':
+            input_data = in_args.split(' ')
+            rc_name = ''
+            if len(input_data) >= 2:
+                if input_data[0] == 'plugins' :
+                    rc_name = 'plugins/plugins'
+                elif input_data[0] == 'jails':
+                    rc_name = 'jails/jails'
+                else:
+                    print "Error 2: Did not select correct resource name"
+                    print "Ex: resource plugins 1 start"
+                    print "Ex: resource plugins 1 stop"
+                    print "Ex: resource plugins 1 delete"
+                    print "Ex: resource jails 1 start"
+                    print "Ex: resource jails 1 stop"
+                    print "Ex: resource jails 1 delete"
+                    return 0
+            else:
+                print "help : input arguments"
+                print "Ex: resource plugins 1 start"
+                print "Ex: resource plugins 1 stop"
+                print "Ex: resource plugins 1 delete"
+                print "Ex: resource jails 1 start"
+                print "Ex: resource jails 1 stop"
+                print "Ex: resource jails 1 delete"
+                return 0
+            call_function = getattr(self,'resources_action')
+            call_function(input_data[1:],username=self.username, password=self.password,resource_name=rc_name)
         else :
             print "Only works in Enable mode"
 
