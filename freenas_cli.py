@@ -5,6 +5,7 @@ import os
 from tabulate import tabulate
 import requests
 import sys
+import json
 
 #------------------ Base API Class -----------------------------------------------
 class APIClient(object):
@@ -219,6 +220,9 @@ class FreenasPrompt(Cmd, FreenasAPI):
     mode = 'default'
     username  = 'root'
     password = 'abcd1234'
+    var_dict = {}
+    variable = ''
+    user_prompt = ''
 
     def do_hello(self, args):
         """Says hello. If you provide a name, it will greet you with it."""
@@ -231,6 +235,7 @@ class FreenasPrompt(Cmd, FreenasAPI):
     def do_en(self, in_args):
         """Move to Enbale Mode """
         if self.mode == 'default':
+            self.user_prompt = self.prompt[:-2]
             self.prompt = self.prompt[:-2]+'-enable> '
             self.mode = 'enable'
             call_function = getattr(self,'get_tastypie_resource')
@@ -316,9 +321,13 @@ Example: resource plugins 1 start
     def do_quit(self, args):
         """Quits the program."""
         if self.mode == 'enable':
-            self.prompt = 'Freenas>'
+            self.prompt = self.user_prompt+'>'
             self.mode = 'default'
             print 'Quitting Enable mode'
+        elif self.mode == 'variable':
+            self.prompt = self.user_prompt+'-enable> '
+            self.mode = 'enable'
+            print 'Quiting Variable Mode'
         else:
             print "Quitting."
             raise SystemExit
@@ -326,9 +335,13 @@ Example: resource plugins 1 start
     def do_exit(self, args):
         """Quits the program."""
         if self.mode == 'enable':
-            self.prompt = 'Freenas>'
+            self.prompt = self.user_prompt+'>'
             self.mode = 'default'
             print 'Quitting Enable mode'
+        elif self.mode == 'variable':
+            self.prompt = self.user_prompt+'-enable> '
+            self.mode = 'enable'
+            print 'Quiting Variable Mode'
         else:
             print "Quitting."
             raise SystemExit
@@ -337,18 +350,70 @@ Example: resource plugins 1 start
         """Control D to exit"""
         return True
 
-    def do_shell(self, line):
-        """Run a shell command"""
-        print "running shell command:", line
-        output = os.popen(line).read()
-        print output
-        self.last_output = output
+    def do_set(self, in_args):
+        """ set the variable to for post or put message"""
+        if self.mode == 'enable':
+            try:
+                input_data = in_args.split(' ')
+                if len(input_data) == 1:
+                    self.line_count = 0
+                    self.mode = 'variable'
+                    self.variable = input_data[0]
+                    self.prompt = self.variable+'_'+str(self.line_count)+'>'
+                    self.var_dict[self.variable] = ''
+                    print "Added variable values Now and quit using exit command"
+                else:
+                    print "More than one variable"
+            except:
+                print "Input error"
+
+    def parseline(self, line):
+        if line == 'exit' or line == 'quit':
+            ret = Cmd.parseline(self, line)
+            return ret
+        if self.mode == 'variable':
+            data = self.var_dict[self.variable]
+            data = data + line
+            self.var_dict[self.variable] = data
+            #self.prompt = self.variable+'_'+str(self.line_count)+'>'
+            ret = Cmd.parseline(self, 'variable')
+            return ret
+        else:
+            ret = Cmd.parseline(self, line)
+            return ret
+
+    def do_variable(self,arg):
+        self.line_count += 1
+        self.prompt = self.variable+'_'+str(self.line_count)+'>'
+
+    def do_show(self,arg):
+            if arg in self.var_dict:
+                #print json.dumps(self.var_dict[arg])
+                if self.is_json(self.var_dict[arg]):
+                    print self.var_dict[arg]
+                else:
+                    print "Data not valid Json"
+            else:
+                print "Variable Does not Exit"
+
+    # def do_shell(self, line):
+    #     """Run a shell command"""
+    #     print "running shell command:", line
+    #     output = os.popen(line).read()
+    #     print output
+    #     self.last_output = output
 
     def do_echo(self, line):
         """Print the input, replacing '$out' with the output of the last shell command"""
         # Obviously not robust
         print line.replace('$out', self.last_output)
 
+    def is_json(self, myjson):
+      try:
+        json_object = json.loads(myjson)
+      except ValueError, e:
+        return False
+      return True
 
 if __name__ == '__main__':
     prompt = FreenasPrompt()
