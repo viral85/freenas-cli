@@ -40,7 +40,7 @@ class APIClient(object):
             response_out = req_method(api_url,auth=auth,)
 
             # raise an exception if status code is not 200
-            if not response_out.status_code in [200,202,204]:
+            if not response_out.status_code in [200,202,204,401]:
                 raise Exception
             else:
                 try:
@@ -209,6 +209,28 @@ class FreenasAPI(object):
             except Exception :
                 return "Error in Getting User Data"
 
+        def resources_create(self, *args, **kwargs):
+            if args[0] == '':
+                headers = ['name', 'url']
+                print tabulate(self.resource_dict.items(),headers, tablefmt="pipe")
+            else:
+                self.rs_apiurl = BASEAPI()
+                self.rs_new_path = self.resource_dict.get(kwargs['resource_name'], None)
+                if self.rs_new_path == None:
+                    return "API Url not avaliable"
+                var_name = args[0][0]
+                self.username = kwargs.get('username', 'root')
+                self.password = kwargs.get('password', 'abcd1234')
+                post_data = self.var_dict[var_name]
+                try:
+                    self.rc_response = self.rs_apiurl.post(self.rs_new_path, data=post_data, username=self.username, password=self.password)
+                    if self.rc_response.status == 401 and self.rc_response.text == '':
+                        print "Created resource"
+                    else:
+                        self.display_plain(self.rc_response)
+                except Exception :
+                    return "Error in Getting User Data"
+
 
 # -------------------------------------------------------------------------------
 # Cli Section.
@@ -317,6 +339,70 @@ Example: resource plugins 1 start
             call_function(input_data[1:],username=self.username, password=self.password)
         else :
             print "Only works in Enable mode"
+
+    def do_create(self,in_args):
+       """ Works on Enbale mode only
+    Get the details resources <resources_name> post_json_data
+    Eg : create resources account/users post_json_data
+    Eg : create resources account/groups post_json_data
+    post_json_data is create by set post_json_data
+       """
+       # Check the invalid Charater as input data
+       if in_args in ['?'] or len(in_args) == 0:
+           print "Wrong option try '? get'"
+           print "Error_1 : Input arguments are wrong"
+           print "Try create resources account/users post_json_data "
+           print " Eg : create resources account/groups post_json_data"
+           return 0
+
+       if self.mode == 'enable':
+           try:
+               input_data = in_args.split(' ')
+               if len(input_data) >= 2:
+                   call_function = getattr('resource_create')
+               else:
+                   print "Error_1 : Input arguments are wrong"
+                   print "Try create resources account/users post_json_data "
+                   print " Eg : create resources account/groups post_json_data"
+                   return 0
+           except:
+               print "Input error"
+           call_function(input_data[1:],username=self.username, password=self.password)
+       else :
+           print "Only works in Enable mode"
+
+    def do_update(self,in_args):
+      """ Works on Enbale mode only
+    Get the details resources <resources_name all
+    Eg : update resources account/users put_json_data
+    Eg : update resources account/groups put_json_data
+    put_json_data is create by set put_json_data
+      """
+      # Check the invalid Charater as input data
+      if in_args in ['?'] or len(in_args) == 0:
+          print "Wrong option try '? get'"
+          print "Error_1 : Input arguments are wrong"
+          print "Try update resources account/users put_json_data"
+          print " Eg : update resources account/groups put_json_data"
+          return 0
+
+      if self.mode == 'enable':
+          try:
+              input_data = in_args.split(' ')
+              if len(input_data) >= 2:
+                  call_function = getattr('resource_update')
+              else:
+                  print "Error_1 : Input arguments are wrong"
+                  print "Try get resources <resources_name> all "
+                  print "Try update resources account/users put_json_data"
+                  print " Eg : update resources account/groups put_json_data"
+                  return 0
+          except:
+              print "Input error"
+          call_function(input_data[1:],username=self.username, password=self.password)
+      else :
+          print "Only works in Enable mode"
+
 
     def do_quit(self, args):
         """Quits the program."""
