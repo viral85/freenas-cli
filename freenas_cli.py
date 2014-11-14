@@ -142,6 +142,25 @@ class FreenasAPI(object):
         except Exception :
             return "Error in Getting User Data"
 
+    def change_password(self,*args,**kwargs):
+        self.user_apiurl = BASEAPI()
+        self.post_msg = {}
+        self.user_path = self.resource_dict.get('account/users', None)
+        if self.user_path == None:
+            return "API Url not avaliable"
+        user_id = args[0][0]
+        user_pwd = args[0][1]
+        self.post_msg['bsdusr_password'] = user_pwd
+        self.user_path = '/account/users/'+str(user_id)+'/password/'
+        self.username = kwargs.get('username', 'root')
+        self.password = kwargs.get('password', 'abcd1234')
+        try:
+            self.rc_response = self.user_apiurl.post(self.user_path , self.post_msg, username=self.username, password=self.password)
+            self.display_tabulate(self.rc_response)
+        except Exception :
+            return "Error in Changeing User Password"
+
+
     def groups(self,*args,**kwargs):
         self.group_apiurl = GroupAPI()
         self.group_path = '/account/groups/'
@@ -205,7 +224,7 @@ class FreenasAPI(object):
                 else:
                     self.rs_path = self.rs_new_path
                     self.rc_response = self.rs_apiurl.get(self.rs_path, username=self.username, password=self.password)
-                    if self.rc_response.status == 204 and self.rc_response.text == '':
+                    if self.rc_response.status_code == 204 and self.rc_response.text == '':
                         print "Requested Plugin Delete"
             except Exception :
                 return "Error in Getting User Data"
@@ -264,7 +283,7 @@ class FreenasAPI(object):
             self.password = kwargs.get('password', 'abcd1234')
             try:
                 self.rc_response = self.rs_apiurl.delete(self.rs_new_path+var_name+'/', data='', username=self.username, password=self.password)
-                if self.rc_response.status == 204 and self.rc_response.text == '':
+                if self.rc_response.status_code == 204 and self.rc_response.text == '':
                     print "Requested Resource Delete"
                 else:
                     print "Error :: "+str(self.rc_response.text)
@@ -348,19 +367,19 @@ Example: resource plugins 1 start
         else :
             print "Only works in Enable mode"
 
-    def do_get(self,in_args):
+    def do_list(self,in_args):
         """ Works on Enbale mode only
  Get the details resources <resources_name all
- Eg : get resources jails/jails all
- Eg : get resources account/users all
+ Eg : list resources jails/jails all
+ Eg : list resources account/users all
         """
         # Check the invalid Charater as input data
         if in_args in ['?'] or len(in_args) == 0:
-            print "Wrong option try '? get'"
+            print "Wrong option try '? list'"
             print "Error_1 : Input arguments are wrong"
-            print "Try get resources <resources_name> all "
-            print " Eg : get resources jails/jails all"
-            print " Eg : get resources account/users all"
+            print "Try list resources <resources_name> all "
+            print " Eg : list resources jails/jails all"
+            print " Eg : list resources account/users all"
             return 0
 
         if self.mode == 'enable':
@@ -370,9 +389,9 @@ Example: resource plugins 1 start
                     call_function = getattr(self,input_data[0])
                 else:
                     print "Error_1 : Input arguments are wrong"
-                    print "Try get resources <resources_name> all "
-                    print " Eg : get resources jails/jails all"
-                    print " Eg : get resources account/users all"
+                    print "Try list resources <resources_name> all "
+                    print " Eg : list resources jails/jails all"
+                    print " Eg : list resources account/users all"
                     return 0
             except:
                 print "Input error"
@@ -458,7 +477,31 @@ Example: resource plugins 1 start
         else :
             print "Only works in Enable mode"
 
+    def do_change_password(self, in_args):
+        """ Works on Enbale mode only
+        Eg : change_password <id> <new_password>
+        """
+        # Check the invalid Charater as input data
+        if in_args in ['?'] or len(in_args) == 0:
+            print "Wrong option try '? get'"
+            print "Error_1 : Input arguments are wrong"
+            print " Eg : change_password <id> <new_password>"
+            return 0
 
+        if self.mode == 'enable':
+            try:
+                input_data = in_args.split(' ')
+                if len(input_data) >= 2:
+                    call_function = getattr(self,'change_password')
+                else:
+                    print "Error_1 : Input arguments are wrong"
+                    print " Eg : change_password <id> <new_password>"
+                    return 0
+            except:
+                print "Input Error"
+            call_function(input_data,username=self.username, password=self.password)
+        else :
+            print "Only works in Enable mode"
 
     def do_quit(self, args):
         """Quits the program."""
