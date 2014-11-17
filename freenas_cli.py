@@ -1,5 +1,5 @@
 #!/usr/local/bin/python
-# --------------------- Standard import modules --------------------------------
+# --------------------- Standard import modules ---------
 from cmd import Cmd
 import os
 from tabulate import tabulate
@@ -7,7 +7,7 @@ import requests
 import sys
 import json
 
-#------------------ Base API Class -----------------------------------------------
+#------------------ Base API Class ---------------------
 class APIClient(object):
     """Creates an API client object
     :param user: the API root user.
@@ -64,17 +64,17 @@ class APIClient(object):
         return self._request('get', path, **params)
 
     def put(self, path, data, **params):
-        return self._request('put', path, data=data, **params)
+        return self._request('put', path, data=json.dumps(data), **params)
 
     def post(self, path, data, **params):
-        return self._request('post', path, data=data, **params)
+        return self._request('post', path, data=json.dumps(data), **params)
 
     def delete(self, path, data, **params):
         return self._request('delete', path, data=data, **params)
 
-# -------------------------------------------------------------------------------
+# --------------------------------------------------------
 class BASEAPI(APIClient):
-    BASE_URL = 'http://localhost'
+    BASE_URL = 'http://localhost/'
     METHOD_ALLOWED = ['get','post','put','delete']
 
 class GroupAPI(APIClient):
@@ -108,6 +108,9 @@ class FreenasAPI(object):
         for loop in result:
             table.append(loop.values())
         print tabulate(table,headers, tablefmt="pipe")
+
+    def display_json_tabulate(self, result):
+        print tabulate([result], headers="keys", tablefmt="pipe")
 
     def display_plain(self, result):
         print result.text
@@ -143,7 +146,7 @@ class FreenasAPI(object):
             return "Error in Getting User Data"
 
     def change_password(self,*args,**kwargs):
-        self.user_apiurl = BASEAPI()
+        self.user_apiurl = GroupAPI()
         self.post_msg = {}
         self.user_path = self.resource_dict.get('account/users', None)
         if self.user_path == None:
@@ -156,10 +159,32 @@ class FreenasAPI(object):
         self.password = kwargs.get('password', 'abcd1234')
         try:
             self.rc_response = self.user_apiurl.post(self.user_path , self.post_msg, username=self.username, password=self.password)
-            self.display_tabulate(self.rc_response)
+            self.display_json_tabulate(self.rc_response)
         except Exception :
             return "Error in Changeing User Password"
 
+
+    def groups_action(self,*args,**kwargs):
+        self.group_apiurl = GroupAPI()
+        self.group_path = '/account/groups/'
+        group_id = args[0][1]
+        group_action = kwargs.get('action','get')
+        if group_id != 'all':
+            self.group_path = '/account/users/'+str(group_id)+'/groups/'
+        else:
+            return 'Error not give proper id'
+        self.username = kwargs.get('username', 'root')
+        self.password = kwargs.get('password', 'abcd1234')
+        try:
+            if group_action == 'post':
+                self.post_msg = args[0][2].split(',')
+                self.group_response = self.group_apiurl.post(self.group_path, self.post_msg , username=self.username, password=self.password)
+                self.display_plain(self.group_response)
+            else:
+                self.group_response = self.group_apiurl.get(self.group_path, username=self.username, password=self.password)
+                self.display_json_tabulate(self.group_response)
+        except Exception :
+            return "Error in Getting Group Data"
 
     def groups(self,*args,**kwargs):
         self.group_apiurl = GroupAPI()
@@ -503,6 +528,60 @@ Example: resource plugins 1 start
         else :
             print "Only works in Enable mode"
 
+    def do_get(self, in_args):
+        """ Works on Enbale mode only
+            Get a list of groups of user id.
+        Eg : get groups <user id>
+        """
+        # Check the invalid Charater as input data
+        if in_args in ['?'] or len(in_args) == 0:
+            print "Wrong option try '? get'"
+            print "Error_1 : Input arguments are wrong"
+            print " Eg : change_password <id> <new_password>"
+            return 0
+
+        if self.mode == 'enable':
+            try:
+                input_data = in_args.split(' ')
+                if len(input_data) >= 2:
+                    call_function = getattr(self,'groups_action')
+                else:
+                    print "Error_1 : Input arguments are wrong"
+                    print " Eg : change_password <id> <new_password>"
+                    return 0
+            except:
+                print "Input Error"
+            call_function(input_data, action='get', username=self.username, password=self.password)
+        else :
+            print "Only works in Enable mode"
+
+    def do_set(self, in_args):
+        """ Works on Enbale mode only
+            Set a list of groups of user id.
+        Eg : set groups <user id> <user_list_comma_sepearted>
+        """
+        # Check the invalid Charater as input data
+        if in_args in ['?'] or len(in_args) == 0:
+            print "Wrong option try '? get'"
+            print "Error_1 : Input arguments are wrong"
+            print " Eg : set groups <id> <user_list_comma_sepearted>"
+            return 0
+
+        if self.mode == 'enable':
+            try:
+                input_data = in_args.split(' ')
+                if len(input_data) >= 2:
+                    call_function = getattr(self,'groups_action')
+                else:
+                    print "Error_1 : Input arguments are wrong"
+                    print " Eg : set groups <id> <user_list_comma_sepearted>"
+                    return 0
+            except:
+                print "Input Error"
+            call_function(input_data, action='post', username=self.username, password=self.password)
+        else :
+            print "Only works in Enable mode"
+
     def do_quit(self, args):
         """Quits the program."""
         if self.mode == 'enable':
@@ -534,23 +613,6 @@ Example: resource plugins 1 start
     def do_EOF(self, line):
         """Control D to exit"""
         return True
-
-    def do_set(self, in_args):
-        """ set the variable to for post or put message"""
-        if self.mode == 'enable':
-            try:
-                input_data = in_args.split(' ')
-                if len(input_data) == 1:
-                    self.line_count = 0
-                    self.mode = 'variable'
-                    self.variable = input_data[0]
-                    self.prompt = self.variable+'_'+str(self.line_count)+'>'
-                    self.var_dict[self.variable] = ''
-                    print "Added variable values Now and quit using exit command"
-                else:
-                    print "More than one variable"
-            except:
-                print "Input error"
 
     def parseline(self, line):
         if line == 'exit' or line == 'quit':
